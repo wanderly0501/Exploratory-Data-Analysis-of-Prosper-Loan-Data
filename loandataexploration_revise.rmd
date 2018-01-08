@@ -1,0 +1,978 @@
+---
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+Loan Data Exploration by Wan Li
+========================================================
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+
+library(dplyr)
+library(knitr)
+library(ggplot2)
+library(gridExtra)
+library('GGally')
+
+library('scales')
+library('memisc')
+library('lattice')
+library('MASS')
+library('car')
+library('reshape')
+```
+
+```{r echo=FALSE, Load_the_Data}
+# Load the Data
+loan=read.csv('prosperLoanData.csv')
+
+```
+
+This data set contains 113,937 loans with 81 variables on each loan. 
+I select the following 13 variables to explore: ListingKey, LoanStatus, BorrowerRate, 
+ProsperScore, EmploymentStatus, CreditScoreRangeLower, CreditScoreRangeUpper, 
+StatedMonthlyIncome, LoanMonthsSinceOrigination, LoanOriginalAmount, MonthlyLoanPayment, 
+LP_CustomerPayments, Term.
+
+# Univariate Plots Section
+
+```{r echo=FALSE, Univariate_Plots}
+
+loan_sub<-loan[, c('ListingKey','LoanStatus','BorrowerRate', 
+                   'ProsperScore','EmploymentStatus', 'CreditScoreRangeLower',
+                   'CreditScoreRangeUpper', 'StatedMonthlyIncome',
+                   'LoanMonthsSinceOrigination','LoanOriginalAmount',
+                   'MonthlyLoanPayment','LP_CustomerPayments','Term')]
+loan_sub2 <-loan_sub
+head(loan_sub)
+```
+
+```{r echo=FALSE, Summary}
+dim(loan_sub)
+str(loan_sub)
+levels(loan_sub$LoanStatus)
+levels(loan_sub$EmploymentStatus)
+```
+
+> I subset the dataset to include only 12 variables with 113937 observation.
+
+```{r echo=FALSE, LoanStatus}
+is.ordered(loan_sub$LoanStatus)
+table(loan_sub$LoanStatus)
+```
+
+The levels in LoanStatus is not ordered, and there are too many levels for 
+past due.
+
+```{r echo=FALSE, LoanStatus2}
+loan_sub$LoanStatus<-ordered(loan_sub$LoanStatus,
+                             levels=c('Completed','FinalPaymentInProgress', 
+                                      'Current','Past Due (1-15 days)','Past Due (16-30 days)',
+                                      'Past Due (31-60 days)','Past Due (61-90 days)',
+                                      'Past Due (91-120 days)','Past Due (>120 days)',
+                                      'Defaulted', 'Chargedoff','Cancelled'))
+
+ggplot(aes(x=LoanStatus),data=loan_sub)+geom_bar() +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+table(loan_sub$LoanStatus)
+```
+
+I ordered the LoanStatus levels from completed, nearly completed, current, to 
+past due, defaulted, chargedoff and cancelled.
+
+```{r echo=FALSE, LoanStatus3}
+levels(loan_sub$LoanStatus)<-c('Completed','Current','Current','PastDue','PastDue',
+                               'PastDue','PastDue','PastDue','PastDue','Defaulted',
+                               'Chargedoff', 'Cancelled')
+ggplot(aes(x=LoanStatus),data=loan_sub)+geom_bar() +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+table(loan_sub$LoanStatus)
+```
+
+I combined the pastdue levels together, and FinalPaymentInProgress to Current.The 
+majority of the observations are current or completed, and the minority are PastDue, 
+Defaulted and Chargedoff. The cancelled loans are very rare.
+
+```{r echo=FALSE, BorrowerRate}
+ggplot(aes(x=BorrowerRate),data=loan_sub)+geom_histogram(binwidth=0.005, boundary=0)
+summary(loan_sub$BorrowerRate)
+
+```
+
+The highest BorrowRate is 0.4975 and the lowest is 0. The majority of observations 
+have the BorrowRate between 0.05 and 0.35. The interval near 0.32 has an unusual 
+high frequency. I wonder what factors influence the BorrowRate.
+
+```{r echo=FALSE, ProsperScore}
+ggplot(aes(x=ProsperScore),data=loan_sub)+geom_bar()+
+  scale_x_continuous(breaks=seq(1,11,1))
+summary(loan_sub$ProsperScore)
+```
+
+ProsperScore is discrete quantitative variable, ranging from 1 to 11. The 
+distribution is quite symmetric with most people having medium ProsperScore 
+between 4 and 8.
+
+```{r echo=FALSE, EmploymentStatus}
+is.ordered(loan_sub$EmploymentStatus)
+table(loan_sub$EmploymentStatus)
+```
+
+The levels of EmploymentStatus is not ordered and some levels overlap, like Employed
+and Full-time.
+
+
+```{r echo=FALSE, EmploymentStatus2}
+loan_sub$EmploymentStatus<- ordered(loan_sub$EmploymentStatus, levels=c('Employed',
+                                    'Full-time', 'Part-time', 'Self-employed',
+                                    'Retired', 'Not employed','Not available',
+                                    'Other',''))
+ggplot(aes(x=EmploymentStatus),data=loan_sub)+geom_bar()+
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+```
+
+
+
+
+
+```{r echo=FALSE, EmploymentStatus3}
+levels(loan_sub$EmploymentStatus)<-c('Employed','Employed','Employed','Self-employed',
+                                    'Retired', 'Not employed','Unkown','Unkown','Unkown')
+ggplot(aes(x=EmploymentStatus),data=loan_sub)+geom_bar()+
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+summary(loan_sub$EmploymentStatus)
+```
+
+I ordered the levels and combined the Full-time, Part-time and Employed to one 
+level: Employed. Most of the observations have Employed status, with 6134 people
+being self-employed. The employment statuses of 11408 people are not clear. A small
+number of oberservations have Retired or Not employed status.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE,  CreditScoreRangeLower}
+ggplot(aes(x=CreditScoreRangeLower),data=subset(loan_sub,!is.na(CreditScoreRangeLower)))+
+  geom_histogram(binwidth=25, boundary=0)+
+  scale_x_continuous(breaks=seq(0,900,50), 
+                     lim=c(quantile(loan_sub$CreditScoreRangeLower,0.01,na.rm = TRUE), 
+                           quantile(loan_sub$CreditScoreRangeLower,0.99,na.rm = TRUE)))
+summary(loan_sub$CreditScoreRangeLower)
+```
+
+```{r echo=FALSE, CreditScoreRangeUpper}
+table(loan_sub$CreditScoreRangeUpper-loan_sub$CreditScoreRangeLower)
+
+```
+
+The CreditScoreRangeLower equals CreditScoreRangeLower plus 19. I create a new 
+variable CreditScore, which is average of CreditScoreRangeLower and 
+CreditScoreRangeUpper. The CreditScore have discrete values.
+
+```{r echo=FALSE,  message=FALSE, warning=FALSE, CreditScore}
+loan_sub$CreditScore<-loan_sub$CreditScoreRangeUpper-9.5
+ggplot(aes(x=CreditScore),data=loan_sub)+geom_histogram(binwidth=5, boundary=0)+
+  scale_x_continuous(breaks=seq(0,900,50), 
+                     lim=c(quantile(loan_sub$CreditScoreRangeLower,0.01,na.rm = TRUE), 
+                           quantile(loan_sub$CreditScoreRangeLower,0.99,na.rm = TRUE)))
+summary(loan_sub$CreditScore)
+unique(loan_sub$CreditScore)
+```
+
+Most people have CreditScore between 600 and 800.
+
+
+```{r echo=FALSE,  message=FALSE, warning=FALSE, StatedMonthlyIncome}
+ggplot(aes(x=StatedMonthlyIncome),data=loan_sub)+
+  geom_histogram(binwidth=500,boundary=0)+
+  scale_x_continuous(lim=c(0,quantile(loan_sub$StatedMonthlyIncome,0.99)),
+                     breaks=seq(0,21000,2000))
+summary(loan_sub$StatedMonthlyIncome)
+```
+
+```{r echo=FALSE,  message=FALSE, warning=FALSE, StatedMonthlyIncome2}
+ggplot(aes(x=StatedMonthlyIncome),data=loan_sub)+geom_histogram()+
+  scale_x_log10(lim=c(500,30000), 
+                breaks=c(500,2000,4000,6000,10000,15000,20000,30000))
+summary(loan_sub$StatedMonthlyIncome)
+```
+
+There are some outliers in StatedMonthlyIncome. So I trimmed the highest 1% of 
+the data.Distribution of StatedMonthlyIncome is long-tailed, skewed to the right. 
+So I log-transformed the data. The distribution of transformed data is close to
+normal distribution.
+
+```{r echo=FALSE, LoanMonthsSinceOrigination}
+ggplot(aes(x=LoanMonthsSinceOrigination),data=loan_sub)+
+  geom_histogram(boundary=0, binwidth=1)+
+  scale_x_continuous(breaks=seq(0,100,10))
+summary(loan_sub$LoanMonthsSinceOrigination)
+```
+
+Much more people started loan in the last 10 months than earlier months, which 
+shows economic resurgence. There is alomost no people starting loans 55-64 months 
+ago, which may be because of the economic crisis.
+
+```{r echo=FALSE, LoanOriginalAmount}
+ggplot(aes(x=LoanOriginalAmount),data=loan_sub)+
+  geom_histogram(boundary=0, binwidth=500)+
+  scale_x_continuous(breaks=seq(0,36000,2000))+
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+summary(loan_sub$LoanOriginalAmount)
+sum(loan_sub$LoanOriginalAmount==4000)
+```
+
+The amount of the original loan ranges from $1000 to $35000. 3 quarters of the 
+loans are below 12000. Most of the loans are close to certain numbers like $4000,
+$10000, $1500, $5000. For example, there are 14333 loans with the amount of $4000.
+
+```{r echo=FALSE,  message=FALSE, warning=FALSE, MonthlyLoanPayment }
+q1<-ggplot(aes(x=MonthlyLoanPayment),data=loan_sub)+
+  geom_histogram(boundary=0, binwidth=10)+
+  scale_x_continuous(lim=c(0,1000),breaks=seq(0,2400,40))
+q2<-ggplot(aes(x=MonthlyLoanPayment),data=loan_sub)+
+  geom_histogram(bins = 50)+
+  scale_x_log10(lim=c(20,2000), breaks=c(20,40,100,160,200,300,400,600,1000,2000))
+grid.arrange(q1,q2,ncol=1)
+summary(loan_sub$MonthlyLoanPayment)
+```
+
+Most loans have less than $400 MonthlyLoanPayment. The interval near 170 has
+the highest frequency.The log-transformed distribution apears to be bimodal peaking
+around 160 and again around 330.
+
+
+```{r echo=FALSE,  message=FALSE, warning=FALSE, LP_CustomerPayments}
+q1<-ggplot(aes(x=LP_CustomerPayments),data=loan_sub)+
+  geom_histogram(boundary=0, binwidth=500)+
+  scale_x_continuous(lim=c(0,quantile(loan_sub$LP_CustomerPayments,0.99)),
+                     breaks=seq(0,30000,2000))
+q2<-ggplot(aes(x=LP_CustomerPayments),data=loan_sub)+
+  geom_histogram(boundary=0)+
+  scale_x_log10(lim=c(10,30000),
+                breaks=c(100,500,1000,2000,4000,10000,18000,30000))
+grid.arrange(q1,q2,ncol=1)
+summary(loan_sub$LP_CustomerPayments)
+```
+
+Distribution of LP_CustomerPayments is long-tailed.Log-transformed LP_CustomerPayments
+distribution appears close to normal distribution with peak at about 4000.
+
+```{r echo=FALSE, Term}
+table(loan_sub$Term)
+ggplot(aes(x=Term),data=loan_sub)+geom_bar()+
+  scale_x_continuous(breaks=c(12,36,60))
+loan_sub$Term<-factor(loan_sub$Term, levels=c(12,36,60))
+```
+
+There are 3 unique values for Term. The majority of observations have term of 36 
+months and term of 12 months is quite rare. I change the datatype of Term to factor.
+
+# Univariate Analysis
+
+### Structure of The Dataset
+
+This data set contains 113,937 loans with 81 variables on each loan, including 
+loan amount, borrower rate (or interest rate), current loan status, borrower 
+income, borrower employment status, borrower credit history, and the latest payment 
+information. I select the following 12 variables to explore: ListingKey, 
+LoanStatus, BorrowerRate, ProsperScore, EmploymentStatus, CreditScoreRangeLower, 
+CreditScoreRangeUpper, StatedMonthlyIncome, LoanMonthsSinceOrigination, 
+LoanOriginalAmount, MonthlyLoanPayment, LP_CustomerPayments, Term.
+
+ListingKey is a factor variable showing the unique identifier of each observation. 
+The other variables are features of the observation. The variables LoanStatus and 
+EmploymentStatus are unordered factors. The other variables are numerical or 
+integer variables. I created new variable CreditScore.
+
+* LoanStatus: Most observations are Current or Completed.
+* EmploymentStatus:  Most obeservations has Employed EmploymentStatus.
+* BorrowerRate: The majority of the Borrow Rate fall between 0.05 and 0.35.
+* ProsperScore: Most people having medium ProsperScore between 4 and 8.
+* CreditScore: Most people have CreditScore between 600 and 800.
+* StatedMonthlyIncome:  The median StatedMonthlyIncome is 4667.
+* LoanMonthsSinceOrigination: Much more people started loan in the last 10 months 
+than earlier months. There is a break between 55 and 64.
+* LoanOriginalAmount: Ranging from 1000 to 35000. The median is 6500.
+* MonthlyLoanPayment: The median MonthlyLoanPayment is 217.7.
+* LP_CustomerPayments: The median LP_CustomerPayments is 2583.83.
+* Term: Most loans have term of 36 months.
+
+### Main Features of Interest
+
+The main features of interest in the dataset are BorrowerRate, ProsperScore and
+CreditScore. I'd like to explore which feautures are mostly related to BorrowerRate.
+I think ProsperScore, CreditScore and other variables may be used to decide 
+BorrowRate.
+
+### Other Features in the Dataset
+
+I guess BorrowRate is related with ProsperScore and CreditScore. Other features
+like LoanStatus, EmploymentStatus, CreditScore, StatedMonthlyIncome, LoanOriginalAmount, 
+and MonthlyLoanPayment may also influence BorrowRate.
+
+### New Variable from Existing Variables
+
+The CreditScoreRangeLower equals CreditScoreRangeLower plus 19. I create a new 
+variable CreditScore to represent the credit condition, which is average of 
+CreditScoreRangeLower and CreditScoreRangeUpper. The CreditScore have discrete values.
+
+### Unusual Distributions, Data Wrangling and Transformation
+
+Several variables like StatedMonthlyIncome, LoanOriginalAmount, MonthlyLoanPayment,
+'LP_CustomerPayments, have skewed distribution. I trimed highest values and 
+log-transformed these data.
+
+The distribution of LoanMonthsSinceOrigination shows that there is alomost no 
+people starting loans 55-64 months ago, which may be because of the economic crisis.
+
+The factor variables LoanStatus and EmploymentStatus has messy, unordered levels.
+I combined some levels and ordered the levels. Now the levels of EmploymentStatus 
+are Employed, Self-employed, Retired, Not employed, Unkown. The levels of LoanStatus 
+are Completed, Current, PastDue, Defaulted, Chargedoff, Cancelled.
+
+
+# Bivariate Plots Section
+
+```{r echo=FALSE,fig.width=10,fig.height=10,message=FALSE, warning=FALSE, ggpairs}
+pair_sub <-loan_sub[,c('LoanStatus','BorrowerRate', 'ProsperScore',
+                   'EmploymentStatus', 'CreditScore', 'StatedMonthlyIncome',
+                   'LoanMonthsSinceOrigination','LoanOriginalAmount',
+                   'MonthlyLoanPayment','LP_CustomerPayments','Term')]
+ggpairs(pair_sub[sample.int(nrow(pair_sub),1000),])+
+  theme(axis.ticks = element_blank(), axis.text = element_blank())
+```
+
+From a subset of the data, BorrowerRate is most strongly related with ProsperScore, 
+followed by CreditScore and LoanOriginalAmount. StatedMonthlyIncome, LoanMonthsSinceOrigination, 
+MonthlyLoanPayment and LP_CustomerPayments don't have strong correlation with 
+BorrowerRate. StatedMonthlyIncome has moderate relationship with LoanOriginalAmount. 
+The boxplots show that LoanStatus and EmploymentStatus may influence the BorrowerRate. 
+I would like to look closer at the scatter plots and box plots involving BorrowerRate 
+and Other variables.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Bivariate_PlotsBorrowerRatevsProsperScore}
+
+ggplot(aes(ProsperScore,BorrowerRate),data=loan_sub)+
+  geom_line(stat='summary', fun.y=mean, color='red',size=2)+
+  geom_jitter(alpha=0.01)+
+  scale_x_continuous(breaks=seq(0,11,1))+
+  geom_smooth(method='lm',color='blue')
+cor.test(loan_sub$BorrowerRate,loan_sub$ProsperScore)
+
+```
+
+The mean of BorrowerRate (red line) decreases aas ProsperScore increases. The 
+variance of BorrowerRate is big, but the conditional mean shows a strong linear 
+relationship. The correlation coefficient is -0.65. BorrowerRate has strong 
+relationship with ProsperScore. 
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Bivariate_BorrowerRate_CreditScore}
+ggplot(aes(CreditScore,BorrowerRate),
+       data=subset(loan_sub, !is.na(CreditScoreRangeUpper)))+
+  geom_line(stat='summary', fun.y=mean, color='red', size=2)+
+  geom_jitter(alpha=0.01)+
+  xlim(quantile(loan_sub$CreditScore,0.01,na.rm = TRUE), 
+       quantile(loan_sub$CreditScore,0.99,na.rm = TRUE))
+```
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, BorrowerRate_CreditScore2}
+ggplot(aes(CreditScore,BorrowerRate),
+       data=subset(loan_sub, !is.na(CreditScoreRangeUpper)))+
+  geom_line(stat='summary', fun.y=mean, color='red', size=2)+
+  geom_jitter(alpha=0.01)+
+  xlim(quantile(loan_sub$CreditScoreRangeUpper,0.01,na.rm=TRUE), 
+       quantile(loan_sub$CreditScoreRangeUpper,0.99,na.rm=TRUE))
+
+cor.test(loan_sub$BorrowerRate, loan_sub$CreditScore)
+```
+
+I trimmed the bottom and top 1% of the CreditScore data. The mean of BorrowerRate 
+(red line) decreases as CreditScore increases. The variance of BorrowerRate is 
+big. The correlation between these two variables is -0.46, which shows a moderate 
+linear relationship.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, BorrowerRateLoanOriginalAmount}
+ggplot(aes(round(LoanOriginalAmount/100)*100,BorrowerRate),data=loan_sub)+
+  geom_jitter(alpha=0.01)+
+ geom_line(stat='summary', fun.y=mean, color='red')+
+  geom_smooth()+
+  xlim(0,quantile(loan_sub$LoanOriginalAmount,0.99))+
+  ylim(0,quantile(loan_sub$BorrowerRate,0.99))
+```
+
+The original plot of conditional mean (binwidth=100) has too much noise. I 
+smoothed it with binwidth of 500 and add a smooth layer (blue line).
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,Bivariate_BorrowerRate_LoanOriginalAmount2}
+ggplot(aes((round(LoanOriginalAmount/500))*500,BorrowerRate),data=loan_sub)+
+  geom_jitter(alpha=0.01)+
+  geom_line(stat='summary', fun.y=mean, color='red',)+
+  geom_smooth()+
+  xlim(0,quantile(loan_sub$LoanOriginalAmount,0.99))+
+  ylim(0,quantile(loan_sub$BorrowerRate,0.99))
+cor.test(loan_sub$BorrowerRate, loan_sub$LoanOriginalAmount)
+```
+
+The variance of BorrowerRate is big.As a whole, the conditional mean of BorrowRate 
+decreases as LoanOriginalAmount increases, but there are many fluctuations. The 
+correlation coefficient between these two variables is -0.33, showing a moderate 
+relationship.
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Bivariate_Plots_BorrowerRate_LoanStatus}
+ggplot(aes(LoanStatus,BorrowerRate),data=loan_sub)+
+  geom_boxplot()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+by(loan_sub$BorrowerRate,loan_sub$LoanStatus,summary)
+```
+
+The means of BorrowerRate for PastDue, Defaulted and Chargedoff loans are higher
+than Completed and Current loans.
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Bivariate_Plot_BorrowerRate_EmploymentStatus}
+ggplot(aes(EmploymentStatus,BorrowerRate),data=loan_sub)+
+  geom_boxplot()+
+  theme(axis.text.x = element_text(angle=90,hjust=1))
+by(loan_sub$BorrowerRate, loan_sub$EmploymentStatus, summary)
+```
+
+Not employed people have much higher median BorrowerRate than other groups.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Bivariate_StatedMonthlyIncome_LoanOriginalAmount}
+ggplot(aes(round(StatedMonthlyIncome/200)*200, LoanOriginalAmount),data=loan_sub)+
+  geom_jitter(alpha=0.05)+
+  scale_x_continuous(lim=c(0,quantile(loan_sub$StatedMonthlyIncome,0.99)))+
+  geom_line(stat='summary', fun.y=mean, color='red')
+
+cor.test(loan_sub$LoanOriginalAmount,loan_sub$StatedMonthlyIncome)
+```
+
+The correlation between StatedMonthlyIncome and LoanOriginalAmount is not strong.
+But the condition mean shows that the mean of LoanOriginalAmount increases as 
+StatedMonthlyIncome increases.
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,StatedMonthlyIncome_MonthlyLoanPayment}
+q1<-ggplot(aes(round(StatedMonthlyIncome/100)*100, MonthlyLoanPayment),
+           data=loan_sub)+
+  geom_jitter(alpha=0.02)+
+  xlim(0,quantile(loan_sub$StatedMonthlyIncome,0.99))+
+  ylim(0,quantile(loan_sub$MonthlyLoanPayment,0.98))+
+  geom_smooth()+
+  geom_line(stat='summary',fun.y=mean,color='red')
+q2<-ggplot(aes(round(StatedMonthlyIncome/100)*100, MonthlyLoanPayment),
+           data=loan_sub)+
+  geom_jitter(alpha=0.02)+
+  ylim(0,quantile(loan_sub$MonthlyLoanPayment,0.98))+
+  geom_smooth()+
+  scale_x_sqrt(lim=c(0,quantile(loan_sub$StatedMonthlyIncome,0.99)))+
+  geom_line(stat='summary',fun.y=mean,color='red')
+q3<-ggplot(aes(round(StatedMonthlyIncome/100)*100, MonthlyLoanPayment),
+           data=loan_sub)+
+  geom_jitter(alpha=0.02)+
+  ylim(0,quantile(loan_sub$MonthlyLoanPayment,0.98))+
+  geom_smooth()+
+  scale_x_log10(lim=c(100,20000))+
+  geom_line(stat='summary',fun.y=mean,color='red')
+grid.arrange(q1,q2,q3,ncol=2)
+cor.test(loan_sub$MonthlyLoanPayment,sqrt(loan_sub$StatedMonthlyIncome))
+cor.test(loan_sub$MonthlyLoanPayment,loan_sub$StatedMonthlyIncome)
+cor.test(loan_sub$MonthlyLoanPayment,log10(loan_sub$StatedMonthlyIncome+1))
+```
+
+The conditional mean of MonthlyLoanPayment increases as StateMonthlyIncome 
+increases. Sqrt-transformed StateMonthlyIncome seems to have better linear 
+relationship with the condition mean of MonthlyLoanPayment. The Correlation 
+between square root of StateMonthlyIncome and MonthlyLoanPayment is 0.37, 
+showing a moderate linear relationship.
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE,Bivariate_CreditScore_ProsperScore}
+ggplot(aes( ProsperScore,CreditScore),data=loan_sub)+
+  geom_jitter(alpha=0.01)+
+  geom_line(stat='summary', fun.y=mean, color='red', size=2)+
+  ylim(600,900)+
+  scale_x_continuous(breaks=seq(0,11,1))
+cor.test(loan_sub$ProsperScore,loan_sub$CreditScore)
+```
+
+ProsperScore and CreditScore have moderate positive relationship with correlation 
+coefficient of 0.37.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE,Bivariate_BorrowerRate_MonthlyIncome}
+ggplot(aes(round(StatedMonthlyIncome/100)*100,BorrowerRate),data=loan_sub)+
+  geom_point(alpha=0.05)+
+  xlim(0,20000)+
+  ylim(0,0.4)+
+  geom_line(stat='summary', fun.y=mean, color='red')+
+  geom_smooth()
+cor.test(loan_sub$BorrowerRate,loan_sub$StatedMonthlyIncome)
+```
+
+Conditional mean of BorrowerRate decreases as the StatedMonthlyIncome increases. 
+But the variance is big and correlation is weak.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE,Bivariate_Plots_LoanOriginalAmount_MonthlyLoanPayment}
+ggplot(aes(LoanOriginalAmount, MonthlyLoanPayment),data = loan_sub)+geom_point()
+```
+
+The term of loan only has a few discrete values, the MonthlyLoanPayment is 
+mainly determined by LoanOriginalAmount, loan term and borrower rate.
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Bi_StatedMonthlyIncome_EmploymentStatus}
+ggplot(aes(EmploymentStatus,StatedMonthlyIncome),data=loan_sub)+
+  geom_boxplot()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylim(0, quantile(loan_sub$StatedMonthlyIncome,0.99))
+by(loan_sub$StatedMonthlyIncome,loan_sub$EmploymentStatus,summary)
+```
+
+Employed people have higher income than Self-employed people who have higher 
+income than retired people. Not employed people mostly don't have any monthly income.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Bivariate_statedMonthlyIncome_LoanStatus}
+ggplot(aes(LoanStatus, StatedMonthlyIncome),data=loan_sub)+
+  geom_boxplot()+
+  ylim(0, quantile(loan_sub$StatedMonthlyIncome,0.98))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+Current loans have the highest StatedMonthlyIncome. PastDue loans have lower 
+StatedMonthlyIncome. Defaulted and Chargedoff loans has lower median 
+StatedMonthlyIncome than PastDue loans. StatedMonthlyIncome of completed loans 
+is in the middle.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Bivariate_ProsperRate_LoanStatus}
+ggplot(aes(x=LoanStatus, y=ProsperScore), data=loan_sub)+
+  geom_boxplot()+
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+
+```
+
+Completed loans have the highest median ProsperScore. PastDue and Chargedoff 
+loans have the lowest median Prosperscore.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Bivariate_ProsperRate_EmploymentStatus}
+ggplot(aes(x=EmploymentStatus, y=ProsperScore), data=loan_sub)+
+  geom_boxplot()+
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+```
+
+Retired people have highest ProsperScore and self-employed people have lowest
+Prosperscore.
+
+```{r echo=FALSE, Bivariate_Plots_BorrowerRate_LoanMonthsSinceOrigination}
+ggplot(aes(LoanMonthsSinceOrigination,BorrowerRate),
+       data=loan_sub)+geom_jitter(alpha=0.1)+
+  scale_x_continuous(breaks=seq(0,100,5))
+loan_sub$monthcut
+```
+
+Although BorrowerRate doesn't seem to have any linear relationship with 
+LoanMonthsSinceOrigination. BorrowerRate does seem to change with time. We can 
+see that in different periods, the BorrowerRate has different ranges and patterns.
+
+```{r echo=FALSE,BorrowerRate_Term}
+ggplot(aes(x=Term, y=BorrowerRate), data=loan_sub)+geom_boxplot()
+```
+
+Loans with term of 12 tends to have lower BorrowerRate. Loans with term of 36 
+have larger range and variance.
+
+# Bivariate Analysis
+
+### Relationships Between Features of Interest and Other features
+
+The mean of BorrowerRate decreases as ProsperScore increases. The variance of 
+BorrowerRate is big, but the conditional mean shows a strong linear relationship. 
+The correlation coefficient is -0.65. BorrowerRate has strong negative relationship 
+with ProsperScore.
+
+The mean of BorrowerRate  decreases as CreditScore increases. The variance of 
+BorrowerRate is big. The correlation between these two variables is -0.46, which 
+shows a moderate linear relationship.
+
+The conditional mean of BorrowerRate decreases as LoanOriginalAmount increases, 
+but there are many fluctuations. The correlation coefficient between these two 
+variables is -0.33, showing a moderate relationship.
+
+The means of BorrowerRate for PastDue, Defaulted and Chargedoff loans are higher 
+than Completed and Current loans.
+
+Not employed people have much higher median BorrowerRate than other groups.
+
+Conditional mean of BorrowerRate decreases as the StatedMonthlyIncome increases. 
+But the variance is big and correlation is weak.
+
+Although BorrowerRate doesn't seem to have any linear relationship with 
+LoanMonthsSinceOrigination. BorrowerRate does seem to change with time. We can 
+see that in different periods, the BorrowerRate has different ranges and patterns.
+
+### Interesting Relationships between the Other Features 
+
+The correlation between StatedMonthlyIncome and LoanOriginalAmount is not strong. 
+But the condition mean shows that the mean of LoanOriginalAmount increases as 
+StatedMonthlyIncome increases.
+
+The conditional mean of MonthlyLoanPayment increases as StateMonthlyIncome 
+increases. Sqrt-transformed StateMonthlyIncome seems to have better linear 
+relationship with the condition mean of MonthlyLoanPayment. The Correlation 
+between square root of StateMonthlyIncome and MonthlyLoanPayment is 0.37, showing 
+a moderate positive linear relationship.
+
+ProsperScore and CreditScore have moderate positive relationship with correlation 
+coefficient of 0.37.
+
+The term of loan only has a few discrete values, the MonthlyLoanPayment is mainly 
+determined by LoanOriginalAmount, loan term and borrower rate. MonthlyLoanPayment 
+and LoanOriginalAmount have strong linear relationship.
+
+Employed people have higher income than Self-employed people who have higher 
+income than retired people. Not-employed people mostly don't have any monthly income.
+
+Current loans have the highest StatedMonthlyIncome. PastDue loans have lower 
+StatedMonthlyIncome. Defaulted and Chargedoff loans has lower median StatedMonthlyIncome 
+than PastDue loans. StatedMonthlyIncome of completed loans is in the middle.
+
+Completed loans have the highest median ProsperScore. PastDue and Chargedoff 
+loans have the lowest median Prosperscore.
+
+Retired people have highest ProsperScore and self-employed people have lowest 
+Prosperscore.
+
+### The Strongest Relationship I found
+
+BorrowerRate has strong negative relationship with ProsperScore and moderate 
+negative relationship with CreditScore. I think ProsperScore and Credit Score 
+could be used in a model to predict the BorrwerRate.
+
+# Multivariate Plots Section
+
+We look at the other variables against the main BorrowerRate vs ProsperScore 
+relationship. I cut the CreditScore, LoanOriginalAmount and LoanMonthsSinceOrigination 
+to create discete variables creditcut, amountcut and monthcut with only a few 
+levels. I will only explore observations with a ProsperScore.
+
+```{r echo=FALSE, Multivariate_Plots_data}
+loan_sub<-subset(loan_sub, !is.na(loan_sub$ProsperScore))
+loan_sub$monthcut<-cut(loan_sub$LoanMonthsSinceOrigination, 
+                       breaks=c(-1, 13, 18, 38, 100))
+loan_sub$creditcut<-cut(loan_sub$CreditScore,
+                        breaks=c(0,650,700,750,800,900))
+loan_sub$amountcut<-cut(loan_sub$LoanOriginalAmount, 
+                        breaks=c(0,4000,10000,15000,35000))
+levels(loan_sub$amountcut)<-c("(0,4000]","(4000,10000]","(10000,15000]", "(15000,35000]")
+```
+
+
+```{r echo=FALSE, Multivariate_Plots_11_BorrowerRate_ProsperScore_CreditScore}
+ggplot(aes(ProsperScore, BorrowerRate), data=subset(loan_sub,loan_sub$LoanStatus!='Completed'))+
+  geom_jitter(aes(color=creditcut),alpha=1)+
+  guides(fill = guide_legend(override.aes= list(alpha = 1)))+
+  scale_color_brewer(type='seq')+
+  theme_dark()
+```
+
+```{r echo=FALSE, Multivariate_Plots_12_BorrowerRate_ProsperScore_CreditScore}
+loan_sub$creditcut<-cut(loan_sub$CreditScore,breaks=c(0,650,700,750,800,900))
+table(loan_sub$creditcut)
+ggplot(aes(ProsperScore, BorrowerRate), 
+       data=subset(loan_sub,loan_sub$LoanStatus!='Completed'))+
+  geom_jitter(aes(color=creditcut),alpha=0.1)+
+  guides(fill = guide_legend(override.aes= list(alpha = 1)))+
+geom_line(aes(color=creditcut),stat='summary', fun.y=mean,size=1.5)
+ 
+by(loan_sub$ProsperScore,loan_sub$creditcut,summary)
+```
+
+
+```{r echo=FALSE, Multivariate_Plots13}
+ggplot(aes(ProsperScore, BorrowerRate), data=loan_sub)+
+  geom_jitter(aes(color=creditcut),alpha=0.01)+
+  guides(fill = guide_legend(override.aes= list(alpha = 1)))+
+  geom_line(aes(color=creditcut),stat='summary', fun.y=mean,size=1)+
+  facet_wrap(~LoanStatus)+
+  ggtitle('Facet Wrap by LoanStatus')+
+  theme(plot.title=element_text(hjust=0.5))
+ 
+```
+
+```{r echo=FALSE, Multivariate_Plots14}
+ggplot(aes(ProsperScore, BorrowerRate), data=loan_sub)+
+  geom_jitter(aes(color=creditcut),alpha=0.1)+
+  guides(fill = guide_legend(override.aes= list(alpha = 1)))+
+  geom_line(aes(color=creditcut),stat='summary', fun.y=mean,size=1)+
+  facet_wrap(~EmploymentStatus)+
+  ggtitle('Facet Wrap by EmploymentStatus')+
+  theme(plot.title=element_text(hjust=0.5))
+ 
+```
+```{r echo=FALSE, Multivariate_Plots15}
+ggplot(aes(ProsperScore, BorrowerRate), data=loan_sub)+
+  geom_jitter(aes(color=creditcut),alpha=0.01)+
+  guides(fill = guide_legend(override.aes= list(alpha = 1)))+
+  geom_line(aes(color=creditcut),stat='summary', fun.y=mean,size=1)+
+  geom_line(stat='summary', fun.y=mean,size=1)+
+  facet_wrap(~amountcut)+
+  ggtitle('Facet Wrap by LoanOriginalAmount')+
+  theme(plot.title=element_text(hjust=0.5))
+ 
+```
+
+```{r echo=FALSE, Multivariate_Plots16}
+ggplot(aes(ProsperScore, BorrowerRate), data=loan_sub)+
+  geom_jitter(aes(color=creditcut),alpha=0.01)+
+  guides(fill = guide_legend(override.aes= list(alpha = 1)))+
+  geom_line(aes(color=creditcut),stat='summary', fun.y=mean,size=1)+
+  facet_wrap(~Term, ncol=2)+
+  ggtitle('Facet Wrap by Term')+
+  theme(plot.title=element_text(hjust=0.5))
+ 
+```
+
+If we count for constant ProsperScore value, the pattern shows that loans with 
+higher CreditScore tend to have lower BorrowerRate.This pattern holds across each 
+level of amountcut.In terms of LoanStatus, this pattern is clear for Completed and 
+Current loans, but is not so clear for PastDue, Defaulted and Chargedoff cases. 
+In terms of EmploymentStatus, this pattern holds for Employed and Self-employed 
+levels, but gets unclear for other levels. In terms of Term, the pattern is not 
+clear for 12 months level.
+
+```{r echo=FALSE, Multivariate_Plot5_BorrowerRate_ProsperScore_lOanAmount_LoanMonths}
+ggplot(aes(ProsperScore, BorrowerRate),data=loan_sub)+
+  geom_jitter(aes(color=creditcut),alpha=0.01)+
+  geom_line(aes(color=creditcut),stat='summary',fun.y=mean,size=1)+
+  facet_wrap(~monthcut)+
+  ggtitle('Facet Wrap by LoanMonthsSinceOrigination')+
+  theme(plot.title=element_text(hjust=0.5))
+```
+
+From this plot we can see that the pattern changed a lot between (-1,13] and 
+(18,38], which means the relationship between BorrowerRate and ProsperScore is 
+different in different periods of time.
+
+```{r echo=FALSE, Multivariate_Plots2_BorrowerRate_ProsperScore_LoanStatus}
+ggplot(aes(ProsperScore, BorrowerRate), 
+       data=subset(loan_sub,loan_sub$LoanStatus!='Cancelled'))+
+  geom_jitter(aes(color=LoanStatus),alpha=0.02)+
+  guides(fill = guide_legend(override.aes= list(alpha = 1)))+
+  geom_line(aes(color=LoanStatus),stat='summary', fun.y=mean,size=1.5)
+
+```
+
+If we count for constant ProsperScore value, the pattern shows that Current loans 
+tend to have lower BorrowerRate than PastDue loans and Completed loans. Defaulted 
+and Chargedoff loans have similar, highest BorrowerRate.
+
+```{r echo=FALSE, Multivariate_Plots3_BorrowerRate_ProsperScore_EmploymentStatus}
+ggplot(aes(ProsperScore, BorrowerRate), 
+       data=subset(loan_sub,loan_sub$EmploymentStatus!='Unkown'))+
+  geom_jitter(aes(color=EmploymentStatus),alpha=0.05,size=0.1)+
+  geom_line(aes(color=EmploymentStatus),stat='summary',fun.y=mean,size=1)
+```
+
+If we count for constant ProsperScore value, the pattern shows that unemployed 
+people tend to have highest BorrowerRate, Retired people have the second highest 
+BorrowerRate, employed people in third place and self-employed have lowest BorrowerRate.
+
+```{r echo=FALSE, Multivariate_Plots4_BorrowerRate_ProsperScore_lOanOriginalAmount}
+
+ggplot(aes(ProsperScore, BorrowerRate),data=loan_sub)+
+  geom_jitter(aes(color=amountcut),alpha=0.05)+
+  geom_line(aes(color=amountcut),stat='summary',fun.y=mean,size=1)
+
+```
+
+Loans with smaller original amount tend to have higher BorrowerRate.
+
+```{r echo=FALSE, BorrowerRate_LoanMonthsSinceOrigination_ProsperScore}
+loan_sub$prosperfactor<-factor(loan_sub$ProsperScore, levels=c(1:11))
+ggplot(aes(LoanMonthsSinceOrigination,BorrowerRate),
+       data=loan_sub)+geom_jitter(aes(color=prosperfactor), alpha=0.02)+
+  geom_line(aes(color=prosperfactor),stat='summary',fun.y=mean,size=1)+
+  scale_x_continuous(breaks=seq(0,100,3))
+```
+
+The conditional mean of BorrowerRate with given ProsperScore is related with
+different periods of time. There are roughly 3 periods: 0-13, 13-38, 38-57. We 
+can see the relationship between BorrowerRate and ProsperScore is more clear in 
+loans within the last 13 month.
+
+I will use these variables to build a linear model to predict the BorrowerRate.
+
+```{r echo = FALSE, linearmodeldata}
+loan_sub2<-subset(loan,!is.na(loan$ProsperScore))
+loan_sub2$amountcut<-loan_sub$amountcut
+loan_sub2$monthcut<-loan_sub$monthcut
+loan_sub2$CreditScore<-loan_sub$CreditScore
+```
+
+
+
+```{r echo=FALSE, linearmodel1}
+
+m1 <- lm(BorrowerRate~ProsperScore, data=loan_sub2)
+m2<- update(m1, ~ .+ CreditScore)
+m3<- update(m2, ~ .+ amountcut)
+m4<- update(m3, ~ .+ LoanStatus)
+m5<- update(m4, ~ .+ EmploymentStatus)
+m6<- update(m5, ~ .+ monthcut)
+m7<- update(m6, ~ .+ Term)
+mtable(m1, m2, m3, m4, m5,m6,m7)
+
+```
+
+This linear model can account for 71.9% of the variance in the BorrowerRate.
+
+```{r echo=FALSE, linearmodel2}
+loan_latest<-subset(loan_sub2, loan_sub2$LoanMonthsSinceOrigination<13)
+m1 <- lm(BorrowerRate~ProsperScore, data=loan_latest)
+m2<- update(m1, ~ .+ CreditScore)
+m3<- update(m2, ~ .+ LoanMonthsSinceOrigination)
+m4<- update(m3, ~ .+ LoanStatus)
+m5<- update(m4, ~ .+ EmploymentStatus)
+m6<- update(m5, ~ .+ amountcut)
+m7<- update(m6, ~ .+ Term)
+mtable(m1, m2, m3, m4, m5,m6,m7)
+
+```
+
+For loans in the last 12 months, the linear model with the same variables will 
+account for 76.2% of the variance. 
+
+# Multivariate Analysis
+
+### Relationships Observed in Investigation
+
+Holding ProsperScore constant, we can see that CreditScore, LoanOriginalAmount
+have negtive relationship with BorrowerRate, and LoanStatus, LoanMonthsSinceOrigination
+and Term all have some influence on BorrwerRate and the relationship between BorrwerRate
+and ProsperScore.
+
+### Interesting Interactions Between Features
+
+From the plots, we can see that in different periods of time, the ProsperScore 
+has different relationships with BorrwerRate. For loans in the last 12 months, the 
+relationship between BorrowerRate and ProsperScore is more clear and linear. Also, 
+the relationship between BorrowerRate and CreditScore is more clear in the last 
+12/13 months.
+
+For loans of different amounts, the relationships between BorrowerRate and 
+ProsperScore are different.
+
+### Linear Model 
+
+I created a linear model to predict the BorrowerRate. This linear model account 
+for 71.9% of the total variance of BorrowerRate. ProsperScore account for 42.2% 
+of the variance. The variables CreditScore, amountcut (LoanMonthsSinceOrigination), 
+LoanStatus, monthcut (LoanMonthsSinceOrigination), Term each improve the R^2 value 
+by a few percent. Surprisingly, EmploymentStatus didn't improve the model very much.
+
+27.8% of the variance can't be explained. One reason may be that some relationships 
+between the BorrowerRate and other variables are not linear. Another reason is that
+the model is different in different periods of time. Another reason may be that 
+there are factors that are not considered here.
+ 
+According to the plot, the model to predict the BorrowerRate may be quite different
+in different periods of time. If I build the model just for loans started in the 
+last 12 months. The model accounts for 76.2% of the variance, and ProsperScore alone
+account for 56.8% of the variance, which is quite different from the model from 
+the model for all loans with ProsperScore. This means that BorrowerRate is more
+closely related to ProsperScore in the last 12 months.
+
+# Final Plots and Summary
+
+### Plot One
+```{r echo=FALSE, Plot_One}
+ggplot(aes(x=BorrowerRate),data=loan_sub)+
+  geom_histogram(binwidth=0.01, boundary=0,color='white')+
+  scale_x_continuous(breaks=seq(0,0.4,0.02))+
+  scale_y_continuous(breaks=seq(0,9000,1000))+
+  ylab('Number of Loans')+
+  ggtitle('BorrowerRate')+
+  theme(plot.title=element_text(hjust=0.5))
+
+```
+
+### Description One
+
+The majority of observations have the BorrowRate between 0.05 and 0.35. The 
+interval near 0.32 has an unusual high frequency. Except for 0.32, the 
+distribution peaks around 0.15.
+
+### Plot Two
+```{r echo=FALSE, Plot_Two}
+ggplot(aes(ProsperScore,BorrowerRate),data=loan_sub)+
+  geom_line(stat='summary', fun.y=mean, color='red', size=2)+
+  geom_jitter(alpha=0.01)+
+  ggtitle('BorrowerRate by ProsperScore')+
+  theme(plot.title=element_text(hjust=0.5))+
+  scale_y_continuous(breaks=seq(0,0.4,0.02))+
+  scale_x_continuous(breaks=seq(0,11,1))
+
+```
+
+### Description Two
+
+The mean of BorrowerRate (red line) decreases aas ProsperScore increases. The 
+variance of BorrowerRate is big, but the conditional mean shows a strong linear 
+relationship. 
+
+### Plot Three
+```{r}
+
+```
+
+
+```{r echo=FALSE, fig.width=10, fig.height=8,Plot_Four}
+ggplot(aes(ProsperScore, BorrowerRate), data=loan_sub)+
+  geom_jitter(aes(color=creditcut),alpha=0.05)+
+  guides(fill = guide_legend(override.aes= list(alpha = 1)))+
+  geom_line(aes(color=creditcut),stat='summary', fun.y=mean,size=1.5)+
+  geom_line(stat='summary', fun.y=mean,size=1.5)+
+  facet_wrap(~amountcut)+
+  ggtitle('Facet Wrap by LoanOriginalAmount')+
+  theme(plot.title=element_text(hjust=0.5))+
+  scale_x_continuous(breaks=seq(0,11,1))+
+  guides(color=guide_legend(title='CreditScore'))+
+ #scale_color_brewer(type='')+
+  scale_y_continuous(breaks=seq(0,0.4,0.05))
+ # theme_dark()
+```
+
+
+### Description Three
+
+If we count for constant ProsperScore value, the pattern shows that loans with 
+higher CreditScore tend to have lower BorrowerRate across each level of 
+LoanOriginalAmount. But the specific pattern between BorrowerRate, ProsperScore 
+and CreditScore is different for different levels of LoanOriginalAmount. Loans 
+with smaller original amount tend to have higher BorrowerRate and bigger variance 
+of BorrowerRate.
+
+------
+
+# Reflection
+
+This data set contains 113,937 loans with 81 variables on each loan. I select 13 
+variables to explore. I first explored the distribution of each variable, and then 
+I explored the relationships between 2 variables. Finally, I explore the 
+BorrowerRate across many variables and created a linear model.
+
+The BorrowerRate is strongly negatively related with ProsperScore. Holding 
+ProsperScore constant, CreditScore, LoanOriginalAmount have negtive relationship 
+with BorrowerRate, and LoanStatus, LoanMonthsSinceOrigination and Term all have 
+some influence on BorrwerRate and the relationship between BorrwerRate and 
+ProsperScore. Most of the variables I explored have some level of relationship 
+with the BorrowerRate and helped improved the model. But EmploymentStatus doesn't 
+seem to help much.
+
+I built a linear model to predit the BorrowerRate. I tried to add many variables 
+to linear model to improve the model. But the R^2 value of the linear model is 
+still not very high. I think for future work, maybe the model should be more than 
+a linear model, and different models should be made for different periods of time. 
+We should also explore more variables from the dataset in the future.
+
