@@ -1,6 +1,6 @@
 # Exploratory Data Analysis of Prosper Loan Data
 ## Overview
-This project explores 
+This project explores a loan data set using R (ggplot2) to find data characteristics and relationships between 13 variables, with the main interest in BorrowerRate.
 ## Installing
 - Install R and R Studio to run RMD file.
 - Install the following libraries.
