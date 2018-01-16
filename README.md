@@ -1,9 +1,8 @@
 # Exploratory Data Analysis of Prosper Loan Data
 ## Overview
-This project explores a loan data set using R (ggplot2) to find data characteristics and relationships between 13 variables, with the main interest in BorrowerRate.
+This project explores a loan data set using R (ggplot2) to find data characteristics and relationships between 13 variables, with the main interest in `BorrowerRate`.
 ## Installing
-- Install R and R Studio to run RMD file.
-- Install the following libraries.
+- The project requires R and R Studio and the following libraries installed.
 ```
 library(dplyr)
 library(knitr)
@@ -18,9 +17,9 @@ library('car')
 library('reshape')
 ```
 ## Files
-- prosperLoanData.csv: original data set
-- loandataexploration_revise.rmd: The RMD file containing the analysis
-- loandataexploration_revise.html: the HTML file knitted from the RMD file using the knitr package
+- `prosperLoanData.csv`: original data set
+- `loandataexploration_revise.rmd`: The RMD file containing the analysis
+- `loandataexploration_revise.html`: the HTML file knitted from the RMD file using the knitr package
 ## Table of Contents
 #### Univariate Plots
 #### Univariate Analysis
